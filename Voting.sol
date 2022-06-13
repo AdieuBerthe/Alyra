@@ -45,7 +45,7 @@ contract Voting is Ownable {
 
     constructor() {
         proposals.push(Proposal("blank", 0));
-        whitelist[msg.sender] = Voter(true, false, 0);
+        addToWhitelist(msg.sender);
     }
 
     function addToWhitelist(address _addr) public onlyOwner{
@@ -65,7 +65,7 @@ contract Voting is Ownable {
 
     function getSomeoneVote(address _addr) public view isRegistered returns(uint){
         require(whitelist[_addr].isRegistered, "this voter isn't registered");
-        require(!whitelist[_addr].hasVoted, "this voter hasn't voted yet");
+        require(whitelist[_addr].hasVoted, "this voter hasn't voted yet");
         return whitelist[_addr].votedProposalId;
     }
 
@@ -122,7 +122,7 @@ contract Voting is Ownable {
     }
 
     function deletetmpWinners() private {
-        for(uint i = winners.length -1; i >= 0; i--) {
+        for(uint i = winners.length; i > 0; i--) {
             winners.pop();
         }
     }
@@ -130,8 +130,8 @@ contract Voting is Ownable {
     //mise en place d'un nouveau tour
     function nextTurn() private {
         //on redonne le vote aux inscrits
-        for(uint i = voters.length-1; i >= 0; i--) {
-            whitelist[voters[i]] = Voter(true, false, 0);
+        for(uint i = voters.length; i > 0; i--) {
+            whitelist[voters[i-1]] = Voter(true, false, 0);
             voters.pop();
         }
         //on recupere les proposals gagnantes
@@ -150,7 +150,7 @@ contract Voting is Ownable {
             proposals.push(tmpProposals[i]);
         }
         //on vide tmpProposal
-        for(uint i = tmpProposals.length -1; i >= 0; i--) {
+        for(uint i = tmpProposals.length; i > 0; i--) {
             tmpProposals.pop();
         }
         //on set le state directement sur VotingSessionStarted

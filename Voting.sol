@@ -11,7 +11,6 @@ contract Voting is Ownable {
     bool hasVoted;
     uint votedProposalId;
     }
-
     struct Proposal {
     string description;
     uint voteCount;
@@ -26,21 +25,19 @@ contract Voting is Ownable {
     VotesTallied
     }
 
-    WorkflowStatus state;
-
-    event VoterRegistered(address voterAddress); 
+    event VoterRegistered(address voterAddress);
     event WorkflowStatusChange(WorkflowStatus previousStatus, WorkflowStatus newStatus);
     event ProposalRegistered(uint proposalId);
     event Voted (address voter, uint proposalId);
 
+    WorkflowStatus state;
     mapping (address => Voter)  whitelist;
-    address[] public voters;
+    address[] voters;
     Proposal[] public proposals;
+    Proposal[] tmpProposals; //sera utilise en cas d'egalite
     uint[] winners;
-    Proposal[] tmpProposals; //a utiliser en cas d'egalite
-    
-    uint winningProposalId;
-   
+    uint public winningProposalId;
+
     modifier isRegistered{
         require(whitelist[msg.sender].isRegistered, "you're not registered");
         _;
@@ -50,7 +47,7 @@ contract Voting is Ownable {
         proposals.push(Proposal("blank", 0));
         whitelist[msg.sender] = Voter(true, false, 0);
     }
-    
+
     function addToWhitelist(address _addr) public onlyOwner{
         require(state == WorkflowStatus.RegisteringVoters, "registration is over");
         require(!whitelist[_addr].isRegistered, "this voter is already registered");
@@ -60,9 +57,10 @@ contract Voting is Ownable {
     }
 
     function changeState(uint _id) public onlyOwner{
+        WorkflowStatus prvState = state;
         require(uint(WorkflowStatus.VotesTallied) >= _id, "this event doesn't exist");
         state = WorkflowStatus(_id);
-        emit WorkflowStatusChange(WorkflowStatus(_id - 1), state);
+        emit WorkflowStatusChange(prvState, state);
     }
 
     function getSomeoneVote(address _addr) public view isRegistered returns(uint){
@@ -72,12 +70,16 @@ contract Voting is Ownable {
     }
 
     function addProposal(string calldata _details) public isRegistered {
-        require(state == WorkflowStatus.ProposalsRegistrationStarted, "registration is over");
+        require(state == WorkflowStatus.ProposalsRegistrationStarted, "not time for proposals");
         uint propId = proposals.length;
         proposals.push(Proposal(_details, 0));
         emit ProposalRegistered(propId);
     }
 
+    function getProposals() public view isRegistered returns(Proposal[] memory) {
+        return proposals;
+    }
+    
     function vote(uint _propId) public isRegistered {
         require(state == WorkflowStatus.VotingSessionStarted, "it isn't time to vote");
         require(!whitelist[msg.sender].hasVoted, "you've already voted");
@@ -87,14 +89,14 @@ contract Voting is Ownable {
         emit Voted(msg.sender, _propId);
     }
 
-    
-    function calculateWinner() public onlyOwner {
+    function calculateWinner() public onlyOwner returns(string memory){
         require(state == WorkflowStatus.VotingSessionEnded, "Voting session isn't over yet");
         require(proposals.length > 1, "There was no proposition to vote for");
-        
-        uint leadId = 1; //initialisation pour ignorer les votes blancs 
+        uint leadId = 1; //initialisation pour ignorer les votes blancs
         if(proposals.length == 2 && proposals[1].voteCount > 0) {
             winningProposalId = leadId;
+            changeState(5);
+            return "there is a winner";
         } else if (proposals.length > 2){
             for(uint i = 2; i < proposals.length; i++) {
                 if(proposals[i].voteCount > proposals[leadId].voteCount) {
@@ -102,20 +104,22 @@ contract Voting is Ownable {
                     deletetmpWinners();
                 } else if (proposals[i].voteCount == proposals[leadId].voteCount) {
                     winners.push(i);
-                }  
+                }
                 i++;
             }
             if(winners.length > 0) {
                 winners.push(leadId);
                 // on ajoute un tour de vote, jusqu'a avoir un seul gagnant
                 nextTurn();
-            } else winningProposalId = leadId;
+                return "There are multiple winners, started a new turn";
+            } else {
+                winningProposalId = leadId;
+                changeState(5);
+                return "there is a winner";
+            }
         }
-    
+            return "no proposal passed";
     }
-
-
-
 
     function deletetmpWinners() private {
         for(uint i = winners.length -1; i >= 0; i--) {
@@ -125,7 +129,6 @@ contract Voting is Ownable {
 
     //mise en place d'un nouveau tour
     function nextTurn() private {
-        
         //on redonne le vote aux inscrits
         for(uint i = voters.length-1; i >= 0; i--) {
             whitelist[voters[i]] = Voter(true, false, 0);
@@ -158,17 +161,8 @@ contract Voting is Ownable {
         return proposals[0].voteCount;
     }
 
-    
     function getWinningPropDetails() public view returns(Proposal memory) {
         require(state == WorkflowStatus.VotesTallied, "votes haven't been tallied yet");
         return proposals[winningProposalId];
     }
-
-    function getMultipleWinnersId() public view returns(uint[] memory){
-        require(state == WorkflowStatus.VotesTallied, "votes haven't been tallied yet");
-        return winners;
-    }
-
-    
-     
 }
